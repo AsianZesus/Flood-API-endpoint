@@ -74,8 +74,10 @@ app.post('/login', async (req, res) => {
 });
 
 // handle 404 errors
-app.use((req, res) => {
+app.use((req, res, next) => {
   res.status(404).json({ error: 'Endpoint not found' });
+  console.log(req);
+  next();
 });
 
 // handle all other errors
