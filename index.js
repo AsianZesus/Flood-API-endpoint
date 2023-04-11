@@ -1,5 +1,5 @@
 // Load environment variables from .env file
-require('dotenv').config(); 
+require('dotenv').config();
 
 const express = require('express');
 const bodyParser = require('body-parser');
@@ -7,6 +7,8 @@ const { Pool } = require('pg');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const cors = require('cors');
+const https = require('https');
+const fs = require('fs');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -86,7 +88,15 @@ app.use((error, req, res, next) => {
   res.status(500).json({ error: 'Internal server error.' });
 });
 
+// create the HTTPS server
+const options = {
+  key: fs.readFileSync(process.env.SSL_KEY_PATH),
+  cert: fs.readFileSync(process.env.SSL_CERT_PATH)
+};
+const server = https.createServer(options, app);
+
 // start the server
-app.listen(port, () => {
+server.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
+
