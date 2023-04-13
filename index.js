@@ -8,6 +8,8 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const cors = require('cors');
 const app = express();
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 
 const port = process.env.PORT || 3000;
 
@@ -38,11 +40,10 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// endpoint for user registration
+// enpoint for user registration
 app.post('/register', async (req, res) => {
   const { email, password } = req.body;
   try {
-
     // query the database to see if a user with the given email already exists
     const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
     if (rows.length > 0) {
@@ -50,9 +51,13 @@ app.post('/register', async (req, res) => {
       return res.status(409).json({ error: 'User already exists.' });
     }
 
-    // insert the new user into the database
+    // hash and salt the passworda
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+    // insert the new user into the database with the hashed password
     const query = 'INSERT INTO users (email, password) VALUES ($1, $2)';
-    await pool.query(query, [email, password]);
+    await pool.query(query, [email, hashedPassword]);
 
     // return a success response
     return res.status(200).json({ message: 'User registered successfully.' });
@@ -64,21 +69,31 @@ app.post('/register', async (req, res) => {
   }
 });
 
+// endpoint for user login
+app.post('/login', async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    // query the database to get the user with the given email
+    const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    if (rows.length === 0) {
+      // if no user with the given email exists, return an error response
+      return res.status(401).json({ error: 'Invalid email or password.' });
+    }
 
-// handle 404 errors
-app.use((req, res, next) => {
-  res.status(404).json({ error: 'Endpoint not found' });
-  console.log(req);
-  next();
-});
+    // compare the given password with the stored hashed password
+    const user = rows[0];
+    const passwordMatch = await bcrypt.compare(password, user.password);
+    if (!passwordMatch) {
+      // if the given password doesn't match the stored hashed password, return an error response
+      return res.status(401).json({ error: 'Invalid email or password.' });
+    }
 
-// handle all other errors
-app.use((error, req, res, next) => {
-  console.error(error);
-  res.status(500).json({ error: 'Internal server error.' });
-});
+    // return a success response
+    return res.status(200).json({ message: 'Login successful.' });
 
-// start the server
-app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
+  } catch (error) {
+    // log the error and return an error response
+    console.error(error);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
 });
