@@ -40,6 +40,37 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
+// middleware function for verifying JWT and extracting payload
+function authenticate(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    // if no Authorization header is present, return an error response
+    return res.status(401).json({ error: 'Authorization header missing.' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  const secretKey = process.env.JWT_SECRET_KEY;
+  try {
+    // verify the JWT and extract the payload
+    const payload = jwt.verify(token, secretKey);
+    req.user = payload;
+    next();
+  } catch (error) {
+    // if the JWT is invalid or expired, return an error response
+    console.error(error);
+    return res.status(401).json({ error: 'Invalid or expired token.' });
+  }
+}
+
+// example protected endpoint that requires authentication
+app.get('/protected', authenticate, (req, res) => {
+  // access the user's ID from the JWT payload
+  const userId = req.user.userId;
+  // query the database or perform any other logic based on the user's ID
+  // return a response with the results of the query or other logic
+});
+
+
 // enpoint for user registration
 app.post('/register', async (req, res) => {
   const { email, password } = req.body;
@@ -88,8 +119,13 @@ app.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
-    // return a success response
-    return res.status(200).json({ message: 'Login successful.' });
+    // generate a JWT with the user's ID and any other necessary information
+    const payload = { userId: user.id };
+    const secretKey = process.env.JWT_SECRET_KEY;
+    const token = jwt.sign(payload, secretKey);
+
+    // return a success response with the JWT
+    return res.status(200).json({ token });
 
   } catch (error) {
     // log the error and return an error response
@@ -97,6 +133,7 @@ app.post('/login', async (req, res) => {
     return res.status(500).json({ error: 'Internal server error.' });
   }
 });
+
 
 
 app.listen(port, () => {
