@@ -38,38 +38,6 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// endpoint for user login
-app.post('/login', async (req, res) => {
-  const { email, password } = req.body;
-  try {
-
-    // query the database for the user with the given email
-    const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-    if (rows.length === 0) {
-      // if no user is found, return an error response
-      return res.status(401).json({ error: 'Invalid email or password.' });
-    }
-
-    // compare the provided password with the password stored in the database
-    const storedPassword = rows[0].password.toString();
-    if (password !== storedPassword) {
-      // if the passwords don't match, return an error response
-      return res.status(401).json({ error: 'Invalid email or password.' });
-    }
-    // if the passwords match, return a success response
-    return res.status(200).json({ message: 'Login successful' });
-
-  } catch (error) {
-    if (error.code === '23505') {
-      // if the error is a unique constraint violation, return an error response
-      return res.status(409).json({ error: 'User already exists.' });
-    }
-    // log the error and return an error response
-    console.error(error);
-    return res.status(500).json({ error: 'Internal server error.' });
-  }
-});
-
 // endpoint for user registration
 app.post('/register', async (req, res) => {
   const { email, password } = req.body;
