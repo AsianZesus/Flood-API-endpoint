@@ -43,99 +43,96 @@ app.use(limiter);
 // middleware function for verifying JWT and extracting payload
 function authenticate(req, res, next) {
   const authHeader = req.headers.authorization;
-  if (!authHeader) {
-    // if no Authorization header is present, return an error response
-    return res.status(401).json({ error: 'Authorization header missing.' });
-  }
-
-  const token = authHeader.split(' ')[1];
-  const secretKey = process.env.JWT_SECRET_KEY;
-  try {
-    // verify the JWT and extract the payload
-    const payload = jwt.verify(token, secretKey);
-    req.user = payload;
-    next();
-  } catch (error) {
-    // if the JWT is invalid or expired, return an error response
-    console.error(error);
-    return res.status(401).json({ error: 'Invalid or expired token.' });
+  if (authHeader) {
+    // extract the JWT from the Authorization header
+    const token = authHeader.split(' ')[1];
+    try {
+      // verify the JWT and extract the payload
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      req.user = decoded;
+      next();
+    } catch (err) {
+      res.status(401).json({ error: 'Invalid or expired token' });
+    }
+  } else {
+    res.status(401).json({ error: 'Authentication required' });
   }
 }
 
-// example protected endpoint that requires authentication
-app.get('/protected', authenticate, (req, res) => {
-  // access the user's ID from the JWT payload
-  const userId = req.user.userId;
-  // query the database or perform any other logic based on the user's ID
-  // return a response with the results of the query or other logic
-});
-
-
-// enpoint for user registration
+// API endpoint for registering a new user
 app.post('/register', async (req, res) => {
-  const { email, password } = req.body;
   try {
-    // query the database to see if a user with the given email already exists
-    const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-    if (rows.length > 0) {
-      // if a user with the given email already exists, return an error response
-      return res.status(409).json({ error: 'User already exists.' });
-    }
+    const { name, email, password } = req.body;
+    // hash the password before storing it in the database
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-    // hash and salt the passworda
-    const saltRounds = 10;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    // insert the new user into the "users" table
+    const result = await pool.query(
+      'INSERT INTO users (name, email, password) VALUES ($1, $2, $3) RETURNING id, name, email',
+      [name, email, hashedPassword]
+    );
 
-    // insert the new user into the database with the hashed password
-    const query = 'INSERT INTO users (email, password) VALUES ($1, $2)';
-    await pool.query(query, [email, hashedPassword]);
+    // create a JWT for the new user
+    const token = jwt.sign({ id: result.rows[0].id }, process.env.JWT_SECRET, {
+      expiresIn: '1d',
+    });
 
-    // return a success response
-    return res.status(200).json({ message: 'User registered successfully.' });
+    res.status(201).json({ user: result.rows[0], token });
 
-  } catch (error) {
-    // log the error and return an error response
-    console.error(error);
-    return res.status(500).json({ error: 'Internal server error.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// endpoint for user login
+// API endpoint for logging in a user
 app.post('/login', async (req, res) => {
-  const { email, password } = req.body;
   try {
-    // query the database to get the user with the given email
-    const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-    if (rows.length === 0) {
-      // if no user with the given email exists, return an error response
-      return res.status(401).json({ error: 'Invalid email or password.' });
+    const { email, password } = req.body;
+
+    // get the user with the specified email address
+    const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+
+    if (result.rows.length === 0) {
+      res.status(401).json({ error: 'Invalid email or password' });
+      return;
     }
 
-    // compare the given password with the stored hashed password
-    const user = rows[0];
-    const passwordMatch = await bcrypt.compare(password, user.password);
-    if (!passwordMatch) {
-      // if the given password doesn't match the stored hashed password, return an error response
-      return res.status(401).json({ error: 'Invalid email or password.' });
+    // compare the password hash to the provided password
+    const match = await bcrypt.compare(password, result.rows[0].password);
+
+    if (!match) {
+      res.status(401).json({ error: 'Invalid email or password' });
+      return;
     }
 
-    // generate a JWT with the user's ID and any other necessary information
-    const payload = { userId: user.id };
-    const secretKey = process.env.JWT_SECRET_KEY;
-    const token = jwt.sign(payload, secretKey);
+    // create a JWT for the authenticated user
+    const token = jwt.sign({ id: result.rows[0].id }, process.env.JWT_SECRET, {
+      expiresIn: '1d',
+    });
 
-    // return a success response with the JWT
-    return res.status(200).json({ token });
-
-  } catch (error) {
-    // log the error and return an error response
-    console.error(error);
-    return res.status(500).json({ error: 'Internal server error.' });
+    res.status(200).json({ user: result.rows[0], token });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
+// API endpoint for getting the current user
+app.get('/me', authenticate, async (req, res) => {
+  try {
+    const { id } = req.user;
+    // get the user with the specified ID
+    const result = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
 
+    res.status(200).json({ user: result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
+// start the server
 app.listen(port, () => {
-  console.log(`Server is running on port ${port}.`);
+  console.log(`Server is listening on port ${port}`);
 });
