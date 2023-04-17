@@ -11,6 +11,7 @@ const app = express();
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
+const crypto = require('crypto');
 
 
 const port = process.env.PORT || 3000;
@@ -143,14 +144,7 @@ app.post('/forgot-password', async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    const token = Math.floor(10000 + Math.random() * 90000).toString();
-
-    // Set the token expiration time to 5 minutes
-    const expirationTime = new Date();
-    expirationTime.setMinutes(expirationTime.getMinutes() + 5);
-
-    // Store the token and its expiration time in the database
-    await pool.query('INSERT INTO reset_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)', [user.rows[0].id, token, expirationTime]);
+    const token = crypto.randomInt(10000, 99999).toString();
 
     // Configure the email transporter
     const transporter = nodemailer.createTransport({
@@ -166,7 +160,7 @@ app.post('/forgot-password', async (req, res) => {
       from: process.env.EMAIL_USER,
       to: email,
       subject: 'Password Reset',
-      text: `Please use the following token to reset your password: \n ${token}`
+      text: `Please use the following token to reset your password: ${token}`
     };
 
     // Send the password reset email
@@ -178,7 +172,6 @@ app.post('/forgot-password', async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
-
 
 app.post('/reset-password', async (req, res) => {
   try {
