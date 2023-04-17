@@ -159,7 +159,7 @@ app.post('/forgot-password', async (req, res) => {
       from: process.env.EMAIL_USER,
       to: email,
       subject: 'Password Reset',
-      text: `Please use the following token to reset your password: \${token}`
+      text: `Please use the following token to reset your password: \n ${token}`
     };
 
     // Send the password reset email
