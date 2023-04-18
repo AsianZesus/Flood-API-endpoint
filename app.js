@@ -173,6 +173,32 @@ app.post('/forgot-password', async (req, res) => {
   }
 });
 
+app.post('/validate-reset-token', async (req, res) => {
+  try {
+    const { token } = req.body;
+    const user = await pool.query('SELECT * FROM users WHERE reset_token = $1', [token]);
+
+    if (user.rows.length === 0) {
+      return res.status(400).json({ message: 'Invalid token' });
+    }
+
+    // Check if the token has expired (e.g. more than 1 hour has passed)
+    const currentTime = new Date();
+    const tokenTime = new Date(user.rows[0].reset_token_created_at);
+    const diffTime = Math.abs(currentTime - tokenTime);
+    const diffHours = Math.floor((diffTime / (1000 * 60 * 60)) % 24);
+    if (diffHours > 1) {
+      return res.status(400).json({ message: 'Expired token' });
+    }
+
+    res.status(200).json({ message: 'Valid token' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
 app.post('/reset-password', async (req, res) => {
   try {
     const { token, newPassword } = req.body;
